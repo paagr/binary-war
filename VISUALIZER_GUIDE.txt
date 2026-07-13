@@ -1,7 +1,7 @@
 VISUALIZER GUIDE — binary-war (ms-dos)
 ========================================
 For: Cosmo Dance — "Binary War" (Cosmo-Logic, 2026)
-Author of the visualizer: AI-assisted development
+Author of the visualizer: Paolo Mason — Front End Developer at snoozle.studio
 Contact: open an issue at https://github.com/paagr/binary-war
 
 1.  OVERVIEW
