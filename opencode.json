@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "npm run dev*": "allow",
+      "npm run build*": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git add*": "allow",
+      "git commit*": "ask",
+      "git push*": "ask"
+    },
+    "edit": "allow",
+    "webfetch": "allow",
+    "glob": "allow",
+    "grep": "allow"
+  },
+  "command": {
+    "dev": { "description": "Start Vite dev server with HMR", "template": "npm run dev" },
+    "build": { "description": "Production build to dist/", "template": "npm run build" }
+  }
+}
