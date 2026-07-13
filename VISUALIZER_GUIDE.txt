@@ -1,0 +1,166 @@
+VISUALIZER GUIDE — binary-war (ms-dos)
+========================================
+For: Cosmo Dance — "Binary War" (Cosmo-Logic, 2026)
+Author of the visualizer: AI-assisted development
+Contact: open an issue at https://github.com/paagr/binary-war
+
+1.  OVERVIEW
+    The page plays song.mp3 on loop and renders a full-screen ASCII
+    canvas driven by real-time audio analysis. Every character, its
+    brightness, color, horizontal position, and rotation is controlled
+    by the music's frequency spectrum, transients, and overall energy.
+
+    No two playbacks look the same — Perlin noise and elapsed-time
+    drift ensure infinite variation even if the audio loops.
+
+2.  FREQUENCY BANDS (FFT size 256, sample rate 44100 Hz, ~172 Hz/bin)
+
+    Band       Bins    Frequency range       Visual effect
+    ───────────────────────────────────────────────────────────
+    Bass       0-4      0 – 860 Hz           Horizontal wave X
+                                             (deformation + drift).
+                                             Kick detection (transient
+                                             energy in this range).
+
+    Mid-low    5-15   860 Hz – 2.6 kHz       Horizontal wave X
+                                             (secondary component).
+                                             Contributes to voice/reverb
+                                             brightness wave Y.
+
+    Mid-high  16-40  2.6 kHz – 6.9 kHz       Main driver of voice/
+                                             reverb brightness wave Y.
+                                             Smooth pulsing on vocal
+                                             and synth content.
+
+    Highs     41-127 6.9 kHz – 22 kHz        Reverb tail energy
+                                             (leaky integrator: decay
+                                             rate 0.02 per frame).
+                                             Drives fine-grained
+                                             brightness shimmer + drift.
+
+    Voice     (all    (everything above       Horizontal character row
+    drift     bins 5) 860 Hz not in highs)    drift (multiplier ~89x).
+
+    Tempo     derived from RMS + onset       Beat-synced wave term.
+               3 * rms + 2 * onset           Pushes brightness through
+                                             DOS threshold on every
+                                             kick/snare/transient.
+
+    Kick      derived from bass + onset      Global amplification.
+    energy      2 * bass + onset             - kickAmp: 1x-2x boost
+                                             - kickThreshold: 0.08 drops
+                                               to 0.04 on full kick
+                                             - kickBoost: 1x-1.3x
+
+    Reverb    leaky integrator over highs    Horizontal drift
+    energy    (reverbEnergy += (highs -      (multiplier ~55x).
+              reverbEnergy) * 0.02)          Smooth, slow-decaying sway.
+
+3.  WAVE FUNCTIONS
+
+    Five spatial wave terms are computed per cell (each a sin*cos pair):
+
+    cBass    = sin(rx * bassFreq   + t * bassSpeed)    * cos(...)
+    cMidLow  = sin(rx * mlFreq *0.7 + t * mlSpeed*0.6) * cos(...)
+    cMidHigh = sin(ry * mhFreq     - t * mhSpeed*0.5)  * cos(...)
+    cHigh    = sin(rx + ry + t...)                       * cos(...)
+    cTempo   = sin(rx + ry + t...)                       * cos(...)
+
+    All use rotated coordinates (rx, ry) that continuously rotate
+    up to 60 degrees based on the highs/bass spectral balance.
+
+    They are combined into two channels:
+      waveX = (cBass * kickAmp*2 + noiseX) / (1 + kickAmp)
+        → drives horizontal character offset (pixels)
+
+      waveY = (cMidHigh*10 + cHigh*10 + cTempo*kickAmp + cMidLow*10
+               + noiseY) / (2 + kickAmp)
+        → drives DOS threshold → persistence → brightness/gamma
+
+    A 3D Perlin noise layer (amplitude 0.3) is added to both waveX
+    and waveY for organic, non-repeating spatial variation.
+
+4.  WHAT MAKES GOOD VISUALS (tips for the composer)
+
+    a)  KICKS — every kick hit is amplified 2x and briefly lowers the
+        brightness threshold. Clean, separated kicks with strong
+        transient content produce the most dramatic visual punches.
+        Avoid muddy low-end — if the kick is buried in the bass,
+        the visualizer treats it as sustained energy, not a hit.
+
+    b)  BASS — sustained bass notes produce slow horizontal waves
+        (text slides left/right in a smooth sweep). Great for
+        atmospheric intros. Too much continuous sub-bass without
+        variation makes the drift feel static.
+
+    c)  VOCALS / LEADS — energy in the 860 Hz – 6.9 kHz range drives
+        brightness pulsing (the ASCII characters glow and fade).
+        Clear, dynamic vocals with pauses between phrases create
+        the most readable "breathing" effect. Constant dense
+        distortion in this range keeps everything mid-bright all
+        the time — less contrast.
+
+    d)  HIGH FREQUENCIES / REVERB — above 7 kHz. Short percussive
+        highs (hi-hats, cymbals) create fine-grain brightness
+        shimmer. Long reverb tails produce slow horizontal drift
+        that lingers after the note. A mix of both works best.
+
+    e)  DYNAMIC RANGE — the visualizer responds to the full dynamic
+        range of the mix. Quiet sections let the background color
+        show through. Loud sections fill the screen with bright
+        characters. If the mix is compressed to a narrow dynamic
+        range, the animation loses contrast.
+
+    f)  TEMPO / BPM — the tempo tracker follows RMS and onsets.
+        Fast BPM (140+) produces rapid brightness flickering.
+        Slow BPM (~80-100) lets the persistence motor create
+        smoother, evolving patterns.
+
+    g)  SOUND DESIGN — stereo information is not used (mono mixdown
+        via Web Audio). The analyser reads the combined signal.
+        Wide stereo effects won't produce spatial response.
+
+5.  LOOP TIMING
+
+    The elapsed playback time modulates all frequency/speed parameters
+    by ±10-15% using two incommensurate sine waves (periods ~90s and
+    ~57s). This prevents any two passes through the same audio loop
+    from producing the same visual output, even with identical audio.
+
+6.  COLOR PALETTE
+
+    The palette was extracted from the two reference images
+    (PRD1030_R.jpg and PRD1030_F.jpg) using k-means clustering and
+    OKLCH color space analysis to preserve perceptual proportions:
+
+      #C7DDE2  — bright background (~80% of pixels in reference)
+      #BACED2  — light accent (~3%)
+      #9CABAF  — light-mid (~1%)
+      #696F72  — mid text (~3%)
+      #292627  — dark text/contrast (~2%)
+
+    These proportions mirror the source images' luminance distribution.
+    The background is intentionally bright to match the ~80% bright
+    pixel count in the reference artwork.
+
+7.  TECHNICAL SPECS
+
+    Canvas: full-window ASCII grid at 21px monospace font
+    Grid size: ~61 columns x 28 rows (1920x1080)
+    Frame rate: ~60 fps (requestAnimationFrame)
+    Audio: 44100 Hz, decoded via Web Audio API, FFT 256 bins
+    Persistence: attack ~0.25, decay ~0.96 per frame
+    Spatial reverb: 4-neighbor averaging at 5% mix
+    No external dependencies for rendering (pure Canvas 2D API)
+
+8.  KNOWN LIMITATIONS
+
+    - AudioContext requires a user click to start (browser autoplay
+      policy). Click anywhere to unpause.
+    - The current FFT size (256) gives ~172 Hz/bin resolution.
+      Very low sub-bass (<40 Hz) may fall entirely within bin 0 and
+      not track independently.
+    - The reverb energy integrator uses a fixed 0.02 decay — it does
+      not adapt to the actual reverb time of the recording.
+    - No microphone input — only pre-encoded MP3 playback.
+________________________________________
