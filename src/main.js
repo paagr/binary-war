@@ -105,25 +105,7 @@ const PALETTES = {
 
 const colors = PALETTES.prd1030;
 
-let sourceCode =
-  "Zero . 0 . One . 1 . Binary War . Cosmo Dance . Cosmo-Logic . 2026 . Track 3 . Space . 0 . 1 . ZERO . ONE";
-
-fetch("/song.mp3")
-  .then((r) => r.arrayBuffer())
-  .then((buf) => parseBuffer(buf, "audio/mpeg"))
-  .then((md) => {
-    const c = md.common;
-    const parts = [
-      c.title,
-      c.artist,
-      c.album,
-      c.year,
-      c.track?.no,
-      c.genre?.[0],
-    ].filter(Boolean);
-    sourceCode = parts.join(" . ");
-  })
-  .catch(() => {});
+let sourceCode = "";
 
 const mainCanvas = document.getElementById("ascii-canvas");
 const mainCtx = mainCanvas.getContext("2d");
@@ -142,25 +124,53 @@ let frame = 0;
 const audioCtx = new AudioContext();
 const analyser = audioCtx.createAnalyser();
 analyser.fftSize = 256;
+analyser.connect(audioCtx.destination);
 const timeData = new Uint8Array(analyser.fftSize);
 const freqData = new Uint8Array(analyser.frequencyBinCount);
 let prevRms = 0;
 let reverbEnergy = 0;
 let audioReady = false;
+let currentSource = null;
+let currentTrack = "";
 
-fetch("/song.mp3")
-  .then((r) => r.arrayBuffer())
-  .then((buf) => audioCtx.decodeAudioData(buf))
-  .then((buf) => {
+async function loadTrack(name) {
+  currentTrack = name;
+  if (currentSource) {
+    currentSource.stop();
+    currentSource.disconnect();
+  }
+  audioReady = false;
+  sourceCode = name.replace(/_/g, " ");
+  try {
+    const resp = await fetch("/" + name + ".mp3");
+    const buf = await resp.arrayBuffer();
+    if (currentTrack !== name) return;
+    parseBuffer(buf, "audio/mpeg")
+      .then((md) => {
+        if (currentTrack !== name) return;
+        const c = md.common;
+        sourceCode = [c.title, c.artist, c.album, c.year, c.track?.no, c.genre?.[0]]
+          .filter(Boolean)
+          .join(" . ");
+      })
+      .catch(() => {});
+    const decoded = await audioCtx.decodeAudioData(buf);
+    if (currentTrack !== name) return;
     const src = audioCtx.createBufferSource();
-    src.buffer = buf;
+    src.buffer = decoded;
     src.loop = true;
     src.connect(analyser);
-    analyser.connect(audioCtx.destination);
     src.start();
+    currentSource = src;
     audioReady = true;
-  })
-  .catch(() => {});
+  } catch {}
+}
+
+document.getElementById("track-select").addEventListener("change", (e) => {
+  loadTrack(e.target.value);
+});
+loadTrack("BinaryWar_Digital_TapeMaster_240426");
+
 document.addEventListener("click", () => audioCtx.resume(), { once: true });
 
 mainCtx.font = `bold ${fontSize}px monospace`;
@@ -251,8 +261,8 @@ function mainLoop() {
     ((highs / Math.max(0.01, highs + bass)) * Math.PI) / 3 + timeDrift2 * 0.3;
   const cosA = Math.cos(angle);
   const sinA = Math.sin(angle);
-  const voiceDrift = voice * 89;
-  const reverbDrift = reverbEnergy * 55;
+  const voiceDrift = voice * 140;
+  const reverbDrift = reverbEnergy * 90;
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
@@ -276,21 +286,24 @@ function mainLoop() {
       const cTempo =
         Math.sin(rx * tFreq * 0.4 + ry * tFreq * 0.6 + frame * tSpeed) *
         Math.cos(rx * tFreq * 0.3 - ry * tFreq * 0.5 + frame * tSpeed * 0.5);
-      let segnaleFluido =
-        (cBass * kickAmp + cMidLow + cMidHigh + cHigh + cTempo * kickAmp) /
-        (3 + kickAmp * 2);
+      const cVoice =
+        Math.sin(rx * 0.004 + ry * 0.006 + frame * 0.2 + voice * 3) *
+        Math.cos(rx * 0.002 + ry * 0.003 + frame * 0.12 + voice * 1.5);
 
-      const noiseX = perlin.noise(rx * 0.03, ry * 0.03, frame * 0.25) * 0.3;
-      const noiseY = perlin.noise(rx * 0.05, ry * 0.05, frame * 0.35) * 0.3;
+      const noiseX = (perlin.noise(rx * 0.03, ry * 0.03, frame * 0.25) + perlin.noise(rx * 0.08, ry * 0.08, frame * 0.5) * 0.5) * 0.7;
+      const noiseY = (perlin.noise(rx * 0.05, ry * 0.05, frame * 0.35) + perlin.noise(rx * 0.1, ry * 0.1, frame * 0.6) * 0.5) * 0.7;
 
-      const waveX = (cBass * (kickAmp * 2) + noiseX) / (1 + kickAmp);
+      const waveX = (cBass * kickAmp * 4 + cHigh * kickAmp * 3 + cVoice * 3 + reverbEnergy * 5 + noiseX) / (1 + kickAmp * 2);
       const waveY =
-        (cMidHigh * 10 +
+        (cBass * kickAmp * 8 +
+          cVoice * 10 +
+          reverbEnergy * 16 +
+          cMidHigh * 10 +
           cHigh * 10 +
           cTempo * kickAmp +
           cMidLow * 10 +
           noiseY) /
-        (2 + kickAmp);
+        (4 + kickAmp * 2);
 
       let waveValue = 0;
       if (waveY > kickThreshold) {

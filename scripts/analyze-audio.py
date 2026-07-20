@@ -7,8 +7,9 @@ SR = 22050
 HOP = 512
 N_FFT = 1024
 
-mp3_path = os.path.join(os.path.dirname(__file__), "..", "public", "song.mp3")
-out_path = os.path.join(os.path.dirname(__file__), "..", "public", "audio-data.json")
+track = sys.argv[1] if len(sys.argv) > 1 else "song"
+mp3_path = os.path.join(os.path.dirname(__file__), "..", "public", f"{track}.mp3")
+out_path = os.path.join(os.path.dirname(__file__), "..", "public", f"audio-data-{track}.json")
 
 print(f"Loading {mp3_path}...")
 y, sr = librosa.load(mp3_path, sr=SR, mono=True)
